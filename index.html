@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#9edcf2" />
+  <title>Allubhaibird Flight — Flappy Game</title>
+  <style>
+    :root { color-scheme: light; --ink:#26354a; --pink:#ff78b7; --pink-dark:#e84c96; }
+    * { box-sizing: border-box; }
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; }
+    body {
+      display:grid; place-items:center; padding:14px;
+      font-family: ui-rounded, "Trebuchet MS", system-ui, sans-serif;
+      background: radial-gradient(circle at 20% 15%, #fff9e9 0 5%, transparent 28%), linear-gradient(145deg,#c5f0fb,#8bc9ee 55%,#b4e7ef);
+      color:var(--ink); user-select:none; -webkit-user-select:none;
+    }
+    .game-shell { width:min(100%, 440px); display:flex; flex-direction:column; align-items:center; gap:10px; }
+    .topbar { width:100%; display:flex; align-items:center; justify-content:space-between; padding:0 5px; }
+    .brand { font-size:clamp(18px,5vw,23px); font-weight:900; letter-spacing:-.7px; color:#29445b; text-shadow:0 2px #ffffffa8; }
+    .brand span { color:#ed5b9d; }
+    .sound-btn { border:1px solid #ffffffb8; background:#ffffffa8; color:#29445b; border-radius:999px; padding:9px 13px; font-weight:800; cursor:pointer; box-shadow:0 3px 10px #426d8520; }
+    .stage { position:relative; width:100%; aspect-ratio:420/700; overflow:hidden; border:5px solid #ffffffd9; border-radius:25px; background:#a8e1f4; box-shadow:0 18px 45px #386a8738, inset 0 0 0 1px #ffffff80; touch-action: manipulation; }
+    canvas { display:block; width:100%; height:100%; }
+    .hud { position:absolute; inset:15px 15px auto; display:flex; justify-content:space-between; pointer-events:none; z-index:2; }
+    .pill { min-width:76px; padding:7px 12px; text-align:center; border-radius:14px; color:#29445b; background:#ffffffd9; border:1px solid #fff; box-shadow:0 3px 12px #47718a20; }
+    .pill small { display:block; font-size:10px; font-weight:900; letter-spacing:1.3px; opacity:.65; }
+    .pill strong { display:block; font-size:23px; line-height:1.1; font-weight:1000; }
+    .overlay { position:absolute; inset:0; display:grid; place-items:center; padding:25px; background:linear-gradient(#eafaff48,#fff2f766); z-index:3; transition:opacity .2s ease; }
+    .overlay.hidden { opacity:0; pointer-events:none; }
+    .panel { width:min(100%,310px); text-align:center; padding:25px 22px 22px; border:2px solid #fff; border-radius:25px; background:#fffdf2ed; box-shadow:0 14px 35px #385e7530; backdrop-filter:blur(5px); }
+    .panel .emoji { font-size:37px; line-height:1.2; }
+    .panel h1 { margin:7px 0 5px; color:#e94f98; font-size:clamp(25px,7vw,34px); line-height:1.05; letter-spacing:-1px; }
+    .panel p { margin:9px 0 18px; color:#526477; font-size:14px; line-height:1.5; }
+    .play-btn { width:100%; border:0; border-radius:15px; padding:14px 18px; background:linear-gradient(180deg,#ff91c4,#ed5a9e); color:white; font-size:17px; font-weight:1000; letter-spacing:.3px; box-shadow:0 5px 0 #ca3d7e,0 9px 18px #ed5a9e45; cursor:pointer; transition:transform .12s,box-shadow .12s; }
+    .play-btn:active { transform:translateY(4px); box-shadow:0 1px 0 #ca3d7e,0 4px 10px #ed5a9e45; }
+    .hint { margin:15px 0 0; color:#547087; text-align:center; font-size:12px; font-weight:700; }
+    .hint kbd { padding:3px 7px; border-radius:6px; background:#ffffffbd; border:1px solid #ffffff; box-shadow:0 2px 0 #8db9cc70; }
+    @media (max-height:780px) { body { padding:7px; } .game-shell { gap:5px; width:min(100%, min(440px, calc((100dvh - 48px)*.6))); } .hint { margin-top:6px; } }
+  </style>
+</head>
+<body>
+  <main class="game-shell">
+    <header class="topbar">
+      <div class="brand">TOOTH <span>FAIRY</span> FLIGHT ✨</div>
+      <button class="sound-btn" id="soundBtn" type="button" aria-label="Toggle music">♫ Music: ON</button>
+    </header>
+    <section class="stage" id="stage" aria-label="Allubhaibird Flappy game">
+      <canvas id="game" width="420" height="700"></canvas>
+      <div class="hud">
+        <div class="pill"><small>SCORE</small><strong id="score">0</strong></div>
+        <div class="pill"><small>BEST</small><strong id="best">0</strong></div>
+      </div>
+      <div class="overlay" id="overlay">
+        <div class="panel">
+          <div class="emoji" id="panelEmoji">🧚‍♀️✨</div>
+          <h1 id="panelTitle">ALLUBIRD GAME</h1>
+          <p id="panelText">Help the Allubhaibird fly through the magical gates. Tap, click, or press Space to flap!</p>
+          <button class="play-btn" id="playBtn" type="button">START FLYING</button>
+        </div>
+      </div>
+    </section>
+    <div class="hint">TAP / CLICK or press <kbd>SPACE</kbd> to fly · Avoid the magical gates!</div>
+  </main>
+  <audio id="bgMusic" preload="auto" loop></audio>
+  <script>
+    (() => {
+      'use strict';
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d');
+      const stage = document.getElementById('stage');
+      const overlay = document.getElementById('overlay');
+      const playBtn = document.getElementById('playBtn');
+      const scoreEl = document.getElementById('score');
+      const bestEl = document.getElementById('best');
+      const panelTitle = document.getElementById('panelTitle');
+      const panelText = document.getElementById('panelText');
+      const panelEmoji = document.getElementById('panelEmoji');
+      const music = document.getElementById('bgMusic');
+      const soundBtn = document.getElementById('soundBtn');
+      const W = canvas.width, H = canvas.height, GROUND = 82;
+      const fairy = new Image();
+      const musicSrc = encodeURI('Animal_Bgm_Allu_Arjun_version_bhAAi__credits_Nanicameroon_on_Twitteralluarjun_tr.mp3');
+      const fairySrc = encodeURI('allu arjun meme, telugu, tamil_.jpg');
+      music.src = musicSrc;
+      fairy.src = fairySrc;
+
+      let state = 'ready';
+      let score = 0;
+      let best = Number(localStorage.getItem('toothFairyBest') || 0);
+      let musicOn = true;
+      let lastTime = 0;
+      let worldTime = 0;
+      let groundOffset = 0;
+      let pipes = [];
+      let particles = [];
+      const bird = { x:105, y:300, vy:0, rotation:0, radius:22 };
+      const GRAVITY = 1450, FLAP = -440, SPEED = 155, PIPE_W = 76, GAP = 194, PIPE_SPACING = 245;
+      bestEl.textContent = best;
+
+      const clouds = [
+        {x:30,y:120,s:1.0},{x:260,y:205,s:.75},{x:145,y:390,s:.9},{x:360,y:90,s:.65},{x:15,y:520,s:.7}
+      ];
+      const rand = (min,max) => min + Math.random()*(max-min);
+
+      function roundedRect(x,y,w,h,r,fill,stroke) {
+        ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fillStyle=fill; ctx.fill();
+        if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=3;ctx.stroke();}
+      }
+      function drawCloud(x,y,s,alpha=1) {
+        ctx.save(); ctx.globalAlpha=alpha; ctx.fillStyle='#ffffff';
+        ctx.beginPath(); ctx.arc(x,y,22*s,0,Math.PI*2); ctx.arc(x+23*s,y-12*s,29*s,0,Math.PI*2); ctx.arc(x+53*s,y,22*s,0,Math.PI*2); ctx.arc(x+29*s,y+8*s,25*s,0,Math.PI*2); ctx.fill(); ctx.restore();
+      }
+      function drawBackground(dt) {
+        const sky=ctx.createLinearGradient(0,0,0,H);
+        sky.addColorStop(0,'#8ed6f2'); sky.addColorStop(.68,'#d8f5f8'); sky.addColorStop(1,'#fff0d2');
+        ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+        // Soft sun glow
+        const glow=ctx.createRadialGradient(330,105,5,330,105,105);
+        glow.addColorStop(0,'#fffbd6cc'); glow.addColorStop(1,'#fffbd600');
+        ctx.fillStyle=glow; ctx.fillRect(220,0,200,220);
+        clouds.forEach(c=>{ c.x-= (state==='playing'?SPEED*.20:24)*dt; if(c.x < -100)c.x=W+rand(25,100); drawCloud(c.x,c.y,c.s,.72); });
+        // Distant rolling hills
+        ctx.fillStyle='#a8dfc1'; ctx.beginPath(); ctx.moveTo(0,530); ctx.quadraticCurveTo(90,465,185,530); ctx.quadraticCurveTo(300,455,420,525); ctx.lineTo(420,H); ctx.lineTo(0,H); ctx.fill();
+        ctx.fillStyle='#8fd3ad'; ctx.beginPath(); ctx.moveTo(0,575); ctx.quadraticCurveTo(115,500,235,570); ctx.quadraticCurveTo(335,515,420,570); ctx.lineTo(420,H); ctx.lineTo(0,H); ctx.fill();
+      }
+      function drawPipe(pipe) {
+        const topH=pipe.gapY-GAP/2, bottomY=pipe.gapY+GAP/2;
+        const gradient=ctx.createLinearGradient(pipe.x,0,pipe.x+PIPE_W,0);
+        gradient.addColorStop(0,'#55bd88'); gradient.addColorStop(.45,'#8de2a5'); gradient.addColorStop(1,'#43aa7b');
+        const cap=ctx.createLinearGradient(pipe.x,0,pipe.x+PIPE_W,0);
+        cap.addColorStop(0,'#35a873'); cap.addColorStop(.5,'#a4edb3'); cap.addColorStop(1,'#329968');
+        ctx.fillStyle=gradient; ctx.strokeStyle='#328d6c'; ctx.lineWidth=3;
+        ctx.fillRect(pipe.x,0,PIPE_W,topH-18); ctx.strokeRect(pipe.x,0,PIPE_W,topH-18);
+        ctx.fillRect(pipe.x,bottomY+18,PIPE_W,H-GROUND-(bottomY+18)); ctx.strokeRect(pipe.x,bottomY+18,PIPE_W,H-GROUND-(bottomY+18));
+        roundedRect(pipe.x-7,topH-25,PIPE_W+14,25,7,cap,'#328d6c');
+        roundedRect(pipe.x-7,bottomY,PIPE_W+14,25,7,cap,'#328d6c');
+        // Tiny leaf details
+        ctx.fillStyle='#c9f5bd';
+        for(let y=45;y<topH-35;y+=52) ctx.fillRect(pipe.x+12,y,5,18);
+        for(let y=bottomY+52;y<H-GROUND-20;y+=52) ctx.fillRect(pipe.x+12,y,5,18);
+      }
+      function drawGround(dt) {
+        groundOffset=(groundOffset+SPEED*dt)%(W);
+        ctx.fillStyle='#f5d89b'; ctx.fillRect(0,H-GROUND,W,GROUND);
+        ctx.fillStyle='#7fca82'; ctx.fillRect(0,H-GROUND,W,13);
+        ctx.fillStyle='#fff0c5';
+        for(let x=-40-groundOffset%40;x<W+40;x+=40){ctx.beginPath();ctx.ellipse(x,H-GROUND+32,13,5,0,0,Math.PI*2);ctx.fill();}
+        ctx.fillStyle='#d8ae72'; ctx.fillRect(0,H-GROUND+58,W,3);
+      }
+      function drawFairy() {
+        ctx.save(); ctx.translate(bird.x,bird.y); ctx.rotate(bird.rotation);
+        if(fairy.complete && fairy.naturalWidth) {
+          ctx.drawImage(fairy,-42,-43,84,86);
+        } else {
+          ctx.fillStyle='#ff83ba'; ctx.beginPath(); ctx.arc(0,0,23,0,Math.PI*2); ctx.fill();
+          ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(8,-6,5,0,Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
+      }
+      function addSparkles() {
+        for(let i=0;i<3;i++) particles.push({x:bird.x-23,y:bird.y+rand(-12,12),vx:rand(-65,-25),vy:rand(-35,35),life:.55,size:rand(2,5)});
+      }
+      function drawParticles(dt) {
+        particles=particles.filter(p=>p.life>0);
+        particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;ctx.globalAlpha=Math.max(0,p.life/.55);ctx.fillStyle='#fff4a6';ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();});
+        ctx.globalAlpha=1;
+      }
+      function resetGame() {
+        score=0; scoreEl.textContent='0'; bird.y=300; bird.vy=0; bird.rotation=0;
+        pipes=[]; particles=[];
+        for(let i=0;i<3;i++) pipes.push({x:W+120+i*PIPE_SPACING,gapY:rand(235,445),passed:false});
+      }
+      function flap() {
+        if(state==='ready') startGame();
+        if(state!=='playing') return;
+        bird.vy=FLAP; addSparkles();
+      }
+      async function startMusic() {
+        if(!musicOn) return;
+        try {
+          music.volume = .48;
+          music.muted = false;
+          music.load();
+          await music.play();
+        } catch (_) {
+          /* Browser may require another user gesture. */
+        }
+      }
+      function startGame() {
+        resetGame(); state='playing'; overlay.classList.add('hidden'); startMusic(); flap();
+      }
+      function endGame() {
+        if(state!=='playing') return;
+        state='over';
+        if(score>best){best=score;bestEl.textContent=best;localStorage.setItem('toothFairyBest',String(best));}
+        panelEmoji.textContent='💫🧚‍♀️'; panelTitle.textContent='Oh, fairy dust!';
+        panelText.textContent=`You flew through ${score} ${score===1?'gate':'gates'}! Your best score is ${best}. Ready for another flight?`;
+        playBtn.textContent='FLY AGAIN'; overlay.classList.remove('hidden');
+      }
+      function hitTest(pipe) {
+        const left=bird.x-23, right=bird.x+23, top=bird.y-25, bottom=bird.y+25;
+        const inX=right>pipe.x-5 && left<pipe.x+PIPE_W+5;
+        const topH=pipe.gapY-GAP/2, bottomY=pipe.gapY+GAP/2;
+        return inX && (top<topH || bottom>bottomY);
+      }
+      function update(dt) {
+        worldTime+=dt;
+        if(state==='playing') {
+          bird.vy+=GRAVITY*dt; bird.y+=bird.vy*dt;
+          bird.rotation=Math.min(.95,Math.max(-.55,bird.vy/650));
+          pipes.forEach(p=>{
+            p.x-=SPEED*dt;
+            if(!p.passed && p.x+PIPE_W<bird.x){p.passed=true;score++;scoreEl.textContent=score;}
+            if(hitTest(p)){endGame();}
+          });
+          if(pipes.length && pipes[0].x+PIPE_W < -10){pipes.shift();const last=pipes[pipes.length-1];pipes.push({x:last.x+PIPE_SPACING,gapY:rand(235,445),passed:false});}
+          if(bird.y+24>H-GROUND || bird.y-24<0) endGame();
+        } else if(state==='ready') {
+          bird.y=300+Math.sin(worldTime*2.7)*9; bird.rotation=Math.sin(worldTime*2)*.04;
+        }
+      }
+      function render(dt) {
+        drawBackground(dt);
+        pipes.forEach(drawPipe);
+        drawGround(dt);
+        if(state==='playing') drawParticles(dt);
+        drawFairy();
+      }
+      function loop(now) {
+        const dt=Math.min((now-lastTime)/1000||0, .033); lastTime=now;
+        update(dt); render(dt); requestAnimationFrame(loop);
+      }
+      playBtn.addEventListener('click',startGame);
+      stage.addEventListener('pointerdown',e=>{if(e.target===playBtn)return; if(state==='playing')flap();});
+      window.addEventListener('keydown',e=>{
+        if(e.code==='Space'||e.code==='ArrowUp') {e.preventDefault(); if(state==='playing')flap(); else if(state==='ready')startGame();}
+        if(e.code==='Enter'&&state!=='playing') startGame();
+      });
+      soundBtn.addEventListener('click',()=>{
+        musicOn=!musicOn; soundBtn.textContent=musicOn?'♫ Music: ON':'♫ Music: OFF';
+        if(musicOn) {
+          music.currentTime = 0;
+          startMusic();
+        } else {
+          music.pause();
+        }
+      });
+      music.addEventListener('ended',()=>{if(musicOn){music.currentTime=0;startMusic();}});
+      requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>
